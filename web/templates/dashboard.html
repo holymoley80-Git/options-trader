@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — OptionsTrader{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Dashboard</h1>
+
+<!-- Row 1: Core metrics -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="metric-value">{{ summary.open_positions }}</div>
+                <div class="text-muted small">Open Positions</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card metric-card h-100" style="cursor:pointer;">
+            <div class="card-body">
+                <div class="metric-value">{{ summary.pending_candidates }}</div>
+                <div class="text-muted small">
+                    <a href="{{ url_for('candidates') }}" class="stretched-link text-muted text-decoration-none">Pending Candidates</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="metric-value {% if summary.win_rate_90d >= 0.5 %}positive{% elif summary.win_rate_90d > 0 %}neutral{% else %}negative{% endif %}">
+                    {{ "%.1f%%"|format(summary.win_rate_90d * 100) }}
+                </div>
+                <div class="text-muted small">Win Rate (90d)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="metric-value {% if summary.portfolio_delta > 0 %}positive{% elif summary.portfolio_delta < 0 %}negative{% else %}neutral{% endif %}">
+                    {{ "%+.3f"|format(summary.portfolio_delta) }}
+                </div>
+                <div class="text-muted small">Portfolio Delta</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: P&L metrics -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4 col-6">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="metric-value {% if summary.pnl_30d > 0 %}positive{% elif summary.pnl_30d < 0 %}negative{% else %}neutral{% endif %}">
+                    ${{ "%+.2f"|format(summary.pnl_30d * 100) }}
+                </div>
+                <div class="text-muted small">P&L 30d (1 lot)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-6">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="metric-value {% if summary.pnl_60d > 0 %}positive{% elif summary.pnl_60d < 0 %}negative{% else %}neutral{% endif %}">
+                    ${{ "%+.2f"|format(summary.pnl_60d * 100) }}
+                </div>
+                <div class="text-muted small">P&L 60d (1 lot)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-6">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="metric-value {% if summary.pnl_90d > 0 %}positive{% elif summary.pnl_90d < 0 %}negative{% else %}neutral{% endif %}">
+                    ${{ "%+.2f"|format(summary.pnl_90d * 100) }}
+                </div>
+                <div class="text-muted small">P&L 90d (1 lot)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 3: Exit signals -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Exit Signals Active Today</span>
+        {% if signal_positions %}
+            <span class="badge bg-danger">{{ signal_positions|length }}</span>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        {% if signal_positions %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>ID</th><th>Ticker</th><th>Strategy</th>
+                        <th>Entry Date</th><th>Signal</th><th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pos in signal_positions %}
+                    <tr>
+                        <td>{{ pos.id }}</td>
+                        <td><strong>{{ pos.ticker }}</strong></td>
+                        <td>{{ pos.strategy }}</td>
+                        <td>{{ pos.entry_date }}</td>
+                        <td>
+                            {% set reason = pos.signal_reason|lower %}
+                            {% if '50%' in reason or 'profit' in reason %}
+                                <span class="badge bg-success me-1">TARGET</span>
+                            {% endif %}
+                            {% if '200%' in reason or 'stop' in reason %}
+                                <span class="badge bg-danger me-1">STOP</span>
+                            {% endif %}
+                            {% if '21 dte' in reason or 'dte' in reason %}
+                                <span class="badge bg-warning text-dark me-1">21 DTE</span>
+                            {% endif %}
+                            {% if 'delta' in reason %}
+                                <span class="badge bg-orange me-1" style="background-color:#fd7e14">DELTA</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('positions') }}?tab=open" class="btn btn-sm btn-outline-secondary">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-3 text-muted">No exit signals triggered today.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Row 4: Strategy breakdown -->
+<div class="card">
+    <div class="card-header fw-semibold">Strategy Breakdown</div>
+    <div class="card-body p-0">
+        {% if breakdown %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>Strategy</th><th>Open</th><th>Pending</th><th>Closed</th>
+                        <th>Total P&L (1 lot)</th><th>Net Delta (Open)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in breakdown %}
+                    <tr>
+                        <td>{{ row.strategy }}</td>
+                        <td>{{ row.open }}</td>
+                        <td>{{ row.pending }}</td>
+                        <td>{{ row.closed }}</td>
+                        <td class="{% if row.total_pnl > 0 %}positive{% elif row.total_pnl < 0 %}negative{% else %}neutral{% endif %}">
+                            ${{ "%+.2f"|format(row.total_pnl * 100) }}
+                        </td>
+                        <td class="{% if row.net_delta_open > 0 %}positive{% elif row.net_delta_open < 0 %}negative{% else %}neutral{% endif %}">
+                            {{ "%+.3f"|format(row.net_delta_open) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-3 text-muted">No data yet.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

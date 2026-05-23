@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}Candidates — OptionsTrader{% endblock %}
+
+{% block head %}
+<style>
+  .btn-reject {
+    background-color: #fff !important;
+    color: #9b1c1c !important;
+    border: 1px solid #9b1c1c !important;
+  }
+  .btn-reject:hover {
+    background-color: #9b1c1c !important;
+    color: #fff !important;
+  }
+  tr.candidate-row { cursor: pointer; }
+  .rationale-content h5  { font-size: 1rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: .4rem; }
+  .rationale-content p   { margin-bottom: .75rem; line-height: 1.6; }
+  .rationale-content ul  { padding-left: 1.25rem; margin-bottom: .75rem; }
+  .rationale-content li  { margin-bottom: .25rem; }
+  .rationale-content strong { color: #ffc107; }
+
+  /* Grade buttons */
+  .grade-btn { min-width: 28px; padding: 1px 6px; font-weight: 700; font-size: 0.78rem; }
+  .grade-btn.active-A { background-color: #198754 !important; color: #fff !important; border-color: #198754 !important; }
+  .grade-btn.active-B { background-color: #fd7e14 !important; color: #fff !important; border-color: #fd7e14 !important; }
+  .grade-btn.active-C { background-color: #6c757d !important; color: #fff !important; border-color: #6c757d !important; }
+  .alloc-badge { font-size: 0.7rem; opacity: 0.85; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Pending Candidates</h1>
+    <span class="badge bg-secondary fs-6">{{ candidates|length }}</span>
+</div>
+
+{% if candidates %}
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead class="table-secondary">
+            <tr>
+                <th>Ticker</th>
+                <th>Strategy</th>
+                <th>Expiration</th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Strike price sold (short leg). Closer to the money = more premium collected, more risk.">Short K</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Strike price bought (long leg). Defines your max loss and caps downside risk.">Long K</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Dollar distance between strikes. Determines max risk and credit potential.">Width</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Net premium collected per share. Your max profit if both legs expire worthless.">Credit</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Credit as % of width. Passarelli target: ≥ 1/3 of width (~33%).">Cr/W</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Probability of Profit — estimated likelihood both short legs expire OTM.">PoP</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Delta of the short leg. ~0.30 implies ~30% chance of finishing ITM at expiry.">Short Δ</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Net directional exposure of the full spread. Near zero = market-neutral.">Net Δ</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Daily theta decay earned per share. Positive = time works in your favor.">Net Θ</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Net vega exposure. Negative = position benefits from IV compression after entry.">Net V</span>
+                </th>
+                <th class="text-end">
+                  <span data-bs-toggle="tooltip"
+                        title="Implied Volatility of the short leg at screening. Elevated IV = richer premiums.">IV</span>
+                </th>
+                <th>Generated</th>
+                <th>Grade</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in candidates %}
+            {% set legs   = c.legs %}
+            {% set greeks = c.greeks %}
+            {% set width  = legs.get('width', 0) or 1 %}
+            {% set nd     = greeks.get('net_delta', 0) %}
+            {# Net-delta row color #}
+            {% if nd > 0.06 %}
+              {% set row_bg = '#1a4731' %}{% set row_fg = '#f8f9fa' %}
+            {% elif nd > 0.03 %}
+              {% set row_bg = '#2d6a4f' %}{% set row_fg = '#f8f9fa' %}
+            {% elif nd > 0 %}
+              {% set row_bg = '#95d5b2' %}{% set row_fg = '#212529' %}
+            {% elif nd > -0.03 %}
+              {% set row_bg = '#ffb3b3' %}{% set row_fg = '#212529' %}
+            {% elif nd > -0.06 %}
+              {% set row_bg = '#e05c5c' %}{% set row_fg = '#f8f9fa' %}
+            {% else %}
+              {% set row_bg = '#9b1c1c' %}{% set row_fg = '#f8f9fa' %}
+            {% endif %}
+            {% set row_style = '--bs-table-bg:' ~ row_bg ~ '; --bs-table-color:' ~ row_fg ~ '; color:' ~ row_fg %}
+
+            {# Allocation multiplier from grade #}
+            {% if c.grade == 'A' %}
+              {% set alloc_pct = '120%' %}
+            {% elif c.grade == 'B' %}
+              {% set alloc_pct = '110%' %}
+            {% else %}
+              {% set alloc_pct = '100%' %}
+            {% endif %}
+
+            {# ── Row 1: metrics ── #}
+            <tr id="row-{{ c.id }}" class="candidate-row"
+                style="{{ row_style }}"
+                onclick="showRationale(event, {{ c.id }}, '{{ c.ticker }}', '{{ pretty_strategy(c.strategy) }}')">
+                <td rowspan="2" class="align-middle text-center fw-bold fs-5">{{ c.ticker }}</td>
+                <td>{{ pretty_strategy(c.strategy) }}</td>
+                <td class="text-nowrap">{{ mmddyy(legs.get('expiration', '')) }}</td>
+                {% if legs.get('type') == 'iron_condor' %}
+                <td class="text-end text-nowrap">
+                    {{ legs.get('short_put_strike','?')|int }}P /
+                    {{ legs.get('short_call_strike','?')|int }}C
+                </td>
+                <td class="text-end text-nowrap">
+                    {{ legs.get('long_put_strike','?')|int }}P /
+                    {{ legs.get('long_call_strike','?')|int }}C
+                </td>
+                {% else %}
+                <td class="text-end">{{ legs.get('short_strike', '—') }}</td>
+                <td class="text-end">{{ legs.get('long_strike',  '—') }}</td>
+                {% endif %}
+                <td class="text-end">{{ legs.get('width', '—') }}</td>
+                <td class="text-end">${{ "%.2f"|format(c.credit) }}</td>
+                <td class="text-end">{{ "%.1f%%"|format((c.credit / width * 100) if width else 0) }}</td>
+                <td class="text-end">{{ "%.1f%%"|format(c['pop'] * 100) }}</td>
+                {% if legs.get('type') == 'iron_condor' %}
+                <td class="text-end">{{ "%.3f"|format((greeks.get('short_put_delta', 0) + greeks.get('short_call_delta', 0)) / 2) }}</td>
+                {% else %}
+                <td class="text-end">{{ "%.3f"|format(greeks.get('short_delta', 0)) }}</td>
+                {% endif %}
+                <td class="text-end">{{ "%+.3f"|format(greeks.get('net_delta', 0)) }}</td>
+                <td class="text-end">{{ "%+.3f"|format(greeks.get('net_theta', 0)) }}</td>
+                <td class="text-end">{{ "%+.3f"|format(greeks.get('net_vega',  0)) }}</td>
+                <td class="text-end">{{ "%.1f%%"|format((c.iv or 0) * 100) }}</td>
+                <td class="text-nowrap"><small>{{ mmddyy(c.generated_at) }}</small></td>
+
+                {# Grade selector #}
+                <td rowspan="2" class="align-middle" onclick="event.stopPropagation()">
+                    <div class="d-flex gap-1 justify-content-center mb-1">
+                        <button class="btn btn-sm btn-outline-success grade-btn {% if c.grade == 'A' %}active-A{% endif %}"
+                                onclick="setGrade({{ c.id }}, 'A', this)">A</button>
+                        <button class="btn btn-sm btn-outline-warning grade-btn {% if c.grade == 'B' %}active-B{% endif %}"
+                                onclick="setGrade({{ c.id }}, 'B', this)">B</button>
+                        <button class="btn btn-sm btn-outline-secondary grade-btn {% if c.grade == 'C' %}active-C{% endif %}"
+                                onclick="setGrade({{ c.id }}, 'C', this)">C</button>
+                    </div>
+                    <div id="alloc-{{ c.id }}" class="text-center alloc-badge text-muted">
+                        {{ alloc_pct }} alloc
+                    </div>
+                </td>
+
+                {# Actions #}
+                <td rowspan="2" class="align-middle" onclick="event.stopPropagation()">
+                    <div class="d-flex flex-column gap-1">
+                        <form method="POST" action="{{ url_for('accept_candidate', cid=c.id) }}"
+                              onsubmit="return confirm('Accept {{ c.ticker }}? Allocation: ' + document.getElementById('alloc-{{ c.id }}').textContent.trim());">
+                            <button type="submit" class="btn btn-sm btn-success w-100">Accept</button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-reject"
+                                onclick="toggleReject({{ c.id }})">Reject</button>
+                    </div>
+                    <div id="reject-form-{{ c.id }}" class="mt-2" style="display:none; min-width:240px;">
+                        <form method="POST" action="{{ url_for('reject_candidate', cid=c.id) }}"
+                              class="d-flex gap-1">
+                            <input type="text" name="reason" class="form-control form-control-sm"
+                                   placeholder="Reason (optional)">
+                            <button type="submit" class="btn btn-sm btn-danger">OK</button>
+                            <button type="button" class="btn btn-sm btn-secondary"
+                                    onclick="toggleReject({{ c.id }})">✕</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+
+            {# ── Row 2: trade instructions ── #}
+            <tr class="candidate-row" style="{{ row_style }}; border-bottom: 2px solid rgba(128,128,128,0.25);"
+                onclick="showRationale(event, {{ c.id }}, '{{ c.ticker }}', '{{ pretty_strategy(c.strategy) }}')">
+                <td colspan="14" class="pt-0 pb-2">
+                    <small class="font-monospace opacity-75">
+                        {% for line in trade_instructions(legs) %}
+                            {{ line }}{% if not loop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </small>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% else %}
+<div class="alert alert-info">
+    No pending candidates. Run the scheduler to screen.
+    <br><small class="text-muted mt-1 d-block">CLI: <code>python scheduler.py --dry-run</code> or <code>python main.py candidates fill</code></small>
+</div>
+{% endif %}
+
+{# ── Rationale modal ── #}
+<div class="modal fade" id="rationaleModal" tabindex="-1" aria-labelledby="rationaleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="rationaleModalLabel">Trade Rationale</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="rationaleBody">
+        <!-- populated by JS -->
+      </div>
+      <div class="modal-footer">
+        <small class="text-muted me-auto">Powered by Claude · Passarelli framework</small>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize Bootstrap tooltips
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    new bootstrap.Tooltip(el, { placement: 'top', trigger: 'hover' });
+});
+
+function toggleReject(id) {
+    const el = document.getElementById('reject-form-' + id);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+const ALLOC = { A: '120%', B: '110%', C: '100%' };
+
+function setGrade(cid, grade, clickedBtn) {
+    // Toggle off if already active
+    const isActive = clickedBtn.classList.contains('active-' + grade);
+    const newGrade = isActive ? null : grade;
+
+    fetch('/candidates/' + cid + '/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grade: newGrade }),
+    }).then(r => r.json()).then(data => {
+        if (data.ok !== true) return;
+        // Update button styles
+        const row = clickedBtn.closest('td');
+        row.querySelectorAll('.grade-btn').forEach(btn => {
+            btn.classList.remove('active-A', 'active-B', 'active-C');
+        });
+        if (newGrade) clickedBtn.classList.add('active-' + newGrade);
+
+        // Update allocation badge
+        const allocEl = document.getElementById('alloc-' + cid);
+        allocEl.textContent = (newGrade ? ALLOC[newGrade] : '100%') + ' alloc';
+    });
+}
+
+function showRationale(event, cid, ticker, strategy) {
+    if (event.target.closest('button, input, form, a')) return;
+
+    const modal  = new bootstrap.Modal(document.getElementById('rationaleModal'));
+    const body   = document.getElementById('rationaleBody');
+    const title  = document.getElementById('rationaleModalLabel');
+
+    title.textContent = ticker + ' — ' + strategy;
+    body.innerHTML = `
+        <div class="text-center py-5">
+          <div class="spinner-border text-warning" role="status"></div>
+          <div class="mt-3 text-muted">Analyzing trade with Claude…</div>
+        </div>`;
+    modal.show();
+
+    fetch('/candidates/' + cid + '/rationale')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                body.innerHTML = '<div class="alert alert-danger">' + data.error + '</div>';
+            } else {
+                body.innerHTML = '<div class="rationale-content">' + mdToHtml(data.rationale) + '</div>';
+            }
+        })
+        .catch(() => {
+            body.innerHTML = '<div class="alert alert-danger">Request failed. Check server logs.</div>';
+        });
+}
+
+function mdToHtml(text) {
+    const e = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return e.split(/\n\n+/).map(block => {
+        const b = block.trim();
+        if (/^#{1,3} /.test(b)) {
+            const content = b.replace(/^#+\s*/,'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+            return '<h5>' + content + '</h5>';
+        }
+        const lines = b.split('\n');
+        if (lines.every(l => /^[-*•] /.test(l.trim()))) {
+            const items = lines.map(l => '<li>' + l.replace(/^[-*•]\s*/,'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>') + '</li>').join('');
+            return '<ul>' + items + '</ul>';
+        }
+        const para = lines.map(l => l.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')).join('<br>');
+        return '<p>' + para + '</p>';
+    }).join('');
+}
+</script>
+{% endblock %}

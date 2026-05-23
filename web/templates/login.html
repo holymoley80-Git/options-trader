@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OptionsTrader — Login</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <style>
+        html, body { height: 100%; }
+        body { display: flex; align-items: center; justify-content: center; background-color: #111; }
+        .login-card { width: 100%; max-width: 380px; }
+        .brand { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+    </style>
+</head>
+<body>
+<div class="login-card">
+    <div class="card shadow">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <div class="brand">OptionsTrader</div>
+                <p class="text-muted small mt-1">Dashboard</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} py-2">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" name="password"
+                           autocomplete="current-password" autofocus required>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">Sign In</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

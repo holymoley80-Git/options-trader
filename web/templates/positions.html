@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Positions — OptionsTrader{% endblock %}
+
+{% block head %}
+<style>
+  tr.pos-row-green { --bs-table-bg: #1a4731; --bs-table-color: #f8f9fa; color: #f8f9fa; }
+  tr.pos-row-red   { --bs-table-bg: #9b1c1c; --bs-table-color: #f8f9fa; color: #f8f9fa; }
+  tr.pos-row-neutral {}
+  td.ticker-link { cursor: pointer; text-decoration: underline dotted; }
+  td.ticker-link:hover { color: #ffc107 !important; }
+  .snapshot-table td, .snapshot-table th { font-size: 0.85rem; padding: 4px 10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Positions</h1>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'open' %}active{% endif %}"
+           href="{{ url_for('positions') }}?tab=open">Open</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'closed' %}active{% endif %}"
+           href="{{ url_for('positions') }}?tab=closed">Closed</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'paper' %}active{% endif %}"
+           href="{{ url_for('positions') }}?tab=paper">Paper</a>
+    </li>
+</ul>
+
+{% if tab in ('open', 'paper') %}
+<!-- OPEN / PAPER POSITIONS -->
+{% if positions %}
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead class="table-secondary">
+            <tr>
+                <th>Ticker</th><th>Strategy</th><th>Exp</th>
+                <th>Entry Date</th><th class="text-end">Entry Credit</th>
+                <th class="text-end">Cost-to-Close</th>
+                <th class="text-end">Unrl P&amp;L (1 lot)</th>
+                <th class="text-end">Δ (entry→now)</th>
+                <th class="text-end">Θ (entry→now)</th>
+                <th>Signals</th>
+                {% if tab == 'open' %}<th>Action</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for pos in positions %}
+            {% set snap = pos.snapshot %}
+            {% set legs = pos.legs %}
+            {% set entry_greeks = pos.entry_greeks %}
+            {% set current_greeks = pos.get('current_greeks', {}) %}
+            {% set unrl_pnl = snap.unrealized_pnl if snap else None %}
+            {% set cost_to_close = (pos.entry_credit - unrl_pnl) if unrl_pnl is not none else None %}
+            {% set entry_delta = entry_greeks.get('net_delta', 0) %}
+            {% set curr_delta  = current_greeks.get('net_delta', entry_delta) %}
+            {% set entry_theta = entry_greeks.get('net_theta', 0) %}
+            {% set curr_theta  = current_greeks.get('net_theta', entry_theta) %}
+            {% set signal_reason = snap.exit_signal_reason if snap else '' %}
+
+            {# Row color based on P&L #}
+            {% if unrl_pnl is not none %}
+              {% if unrl_pnl > 0 %}
+                {% set row_class = 'pos-row-green' %}
+              {% elif unrl_pnl < 0 %}
+                {% set row_class = 'pos-row-red' %}
+              {% else %}
+                {% set row_class = 'pos-row-neutral' %}
+              {% endif %}
+            {% else %}
+              {% set row_class = 'pos-row-neutral' %}
+            {% endif %}
+
+            <tr class="{{ row_class }}">
+                <td class="ticker-link fw-bold"
+                    onclick="showSnapshot({{ pos.id }}, '{{ pos.ticker }}')"
+                    title="Click to view entry vs current snapshot">{{ pos.ticker }}</td>
+                <td><small>{{ pretty_strategy(pos.strategy) }}</small></td>
+                <td>{{ mmddyy(legs.get('expiration', '')) }}</td>
+                <td>{{ mmddyy(pos.entry_date) }}</td>
+                <td class="text-end">${{ "%.2f"|format(pos.entry_credit) }}</td>
+                <td class="text-end">
+                    {% if cost_to_close is not none %}
+                        ${{ "%.2f"|format(cost_to_close) }}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td class="text-end fw-bold">
+                    {% if unrl_pnl is not none %}
+                        ${{ "%+.2f"|format(unrl_pnl * 100) }}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td class="text-end">
+                    <small>{{ "%+.3f"|format(entry_delta) }} → {{ "%+.3f"|format(curr_delta) }}</small>
+                </td>
+                <td class="text-end">
+                    <small>{{ "%+.3f"|format(entry_theta) }} → {{ "%+.3f"|format(curr_theta) }}</small>
+                </td>
+                <td>
+                    {% if signal_reason %}
+                        {% set sr = signal_reason|lower %}
+                        {% if '50%' in sr or 'profit' in sr %}
+                            <span class="badge bg-success me-1">TARGET</span>
+                        {% endif %}
+                        {% if '200%' in sr or 'stop' in sr %}
+                            <span class="badge bg-danger me-1">STOP</span>
+                        {% endif %}
+                        {% if 'dte' in sr %}
+                            <span class="badge bg-warning text-dark me-1">21 DTE</span>
+                        {% endif %}
+                        {% if 'delta' in sr %}
+                            <span class="badge me-1" style="background-color:#fd7e14">DELTA</span>
+                        {% endif %}
+                    {% endif %}
+                </td>
+                {% if tab == 'open' %}
+                <td>
+                    <button type="button" class="btn btn-sm btn-outline-warning"
+                            data-bs-toggle="modal"
+                            data-bs-target="#closeModal"
+                            data-pos-id="{{ pos.id }}"
+                            data-ticker="{{ pos.ticker }}">
+                        Close
+                    </button>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if tab == 'open' %}
+<!-- Close Position Modal -->
+<div class="modal fade" id="closeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Close Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="closeForm" action="">
+                <div class="modal-body">
+                    <p>Closing position <strong id="modalPosLabel"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label">Exit Debit (per share)</label>
+                        <input type="number" name="exit_debit" class="form-control"
+                               step="0.01" min="0" required placeholder="e.g. 0.50">
+                        <div class="form-text">P&amp;L = Entry Credit − Exit Debit</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reason</label>
+                        <input type="text" name="reason" class="form-control"
+                               placeholder="e.g. 50% profit target" value="manual close">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Close Position</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+    {% if tab == 'paper' %}No paper positions yet — they are created automatically when candidates are generated.
+    {% else %}No open positions.{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<!-- CLOSED POSITIONS -->
+{% if positions %}
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead class="table-secondary">
+            <tr>
+                <th>Ticker</th><th>Strategy</th>
+                <th>Entry Date</th><th>Exit Date</th>
+                <th class="text-end">Entry Credit</th>
+                <th class="text-end">Exit Debit</th>
+                <th class="text-end">P&amp;L (1 lot)</th>
+                <th>Exit Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pos in positions %}
+            {% set pnl = pos.pnl %}
+            {# Row color based on realized P&L #}
+            {% if pnl is not none %}
+              {% if pnl > 0 %}{% set row_class = 'pos-row-green' %}
+              {% elif pnl < 0 %}{% set row_class = 'pos-row-red' %}
+              {% else %}{% set row_class = 'pos-row-neutral' %}{% endif %}
+            {% else %}{% set row_class = 'pos-row-neutral' %}{% endif %}
+            <tr class="{{ row_class }}">
+                <td class="ticker-link fw-bold"
+                    onclick="showSnapshot({{ pos.id }}, '{{ pos.ticker }}')"
+                    title="Click to view entry vs current snapshot">{{ pos.ticker }}</td>
+                <td><small>{{ pretty_strategy(pos.strategy) }}</small></td>
+                <td>{{ mmddyy(pos.entry_date) }}</td>
+                <td>{{ mmddyy(pos.exit_date or '') or '—' }}</td>
+                <td class="text-end">${{ "%.2f"|format(pos.entry_credit) }}</td>
+                <td class="text-end">
+                    {% if pos.exit_debit is not none %}${{ "%.2f"|format(pos.exit_debit) }}
+                    {% else %}—{% endif %}
+                </td>
+                <td class="text-end fw-bold">
+                    {% if pnl is not none %}${{ "%+.2f"|format(pnl * 100) }}
+                    {% else %}—{% endif %}
+                </td>
+                <td><small>{{ pos.exit_reason or '—' }}</small></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-info">No closed positions.</div>
+{% endif %}
+
+{% endif %}
+
+{# ── Snapshot popup modal ── #}
+<div class="modal fade" id="snapshotModal" tabindex="-1" aria-labelledby="snapshotModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="snapshotModalLabel">Position Snapshot</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="snapshotBody">
+        <!-- populated by JS -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const closeModal = document.getElementById('closeModal');
+if (closeModal) {
+    closeModal.addEventListener('show.bs.modal', function(event) {
+        const btn = event.relatedTarget;
+        const posId = btn.getAttribute('data-pos-id');
+        const ticker = btn.getAttribute('data-ticker');
+        document.getElementById('modalPosLabel').textContent = '#' + posId + ' (' + ticker + ')';
+        document.getElementById('closeForm').action = '/positions/' + posId + '/close';
+    });
+}
+
+function fmtNum(v, prefix, decimals) {
+    if (v === null || v === undefined) return '—';
+    return prefix + Number(v).toFixed(decimals);
+}
+function fmtPct(v) {
+    if (v === null || v === undefined) return '—';
+    return (v * 100).toFixed(1) + '%';
+}
+function fmtDate(s) {
+    if (!s) return '—';
+    // 'YYYY-MM-DD' → 'MM/DD/YY'
+    const p = s.substring(0, 10).split('-');
+    if (p.length < 3) return s;
+    return p[1] + '/' + p[2] + '/' + p[0].substring(2);
+}
+
+function showSnapshot(pid, ticker) {
+    const modal = new bootstrap.Modal(document.getElementById('snapshotModal'));
+    const body  = document.getElementById('snapshotBody');
+    const title = document.getElementById('snapshotModalLabel');
+    title.textContent = ticker + ' — Entry vs Current';
+    body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-secondary" role="status"></div></div>';
+    modal.show();
+
+    fetch('/positions/' + pid + '/detail')
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) {
+                body.innerHTML = '<div class="alert alert-danger">' + d.error + '</div>';
+                return;
+            }
+            const e = d.entry, c = d.current;
+            body.innerHTML = `
+<table class="table table-sm snapshot-table">
+  <thead class="table-secondary">
+    <tr><th></th><th>Date</th><th>Underlying</th><th>IV (short)</th><th>Option Price</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="fw-bold text-muted">Entry</td>
+      <td>${fmtDate(e.date)}</td>
+      <td>${fmtNum(e.underlying, '$', 2)}</td>
+      <td>${fmtPct(e.iv)}</td>
+      <td>${fmtNum(e.option_price, '$', 2)}</td>
+    </tr>
+    <tr>
+      <td class="fw-bold text-muted">Current</td>
+      <td>${fmtDate(c.date)}</td>
+      <td>${fmtNum(c.underlying, '$', 2)}</td>
+      <td>${fmtPct(c.iv)}</td>
+      <td>${fmtNum(c.option_price, '$', 2)}</td>
+    </tr>
+  </tbody>
+</table>`;
+        })
+        .catch(() => {
+            body.innerHTML = '<div class="alert alert-danger">Request failed.</div>';
+        });
+}
+</script>
+{% endblock %}
