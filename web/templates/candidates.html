@@ -44,14 +44,6 @@
                 <th>Expiration</th>
                 <th class="text-end">
                   <span data-bs-toggle="tooltip"
-                        title="Strike price sold (short leg). Closer to the money = more premium collected, more risk.">Short K</span>
-                </th>
-                <th class="text-end">
-                  <span data-bs-toggle="tooltip"
-                        title="Strike price bought (long leg). Defines your max loss and caps downside risk.">Long K</span>
-                </th>
-                <th class="text-end">
-                  <span data-bs-toggle="tooltip"
                         title="Dollar distance between strikes. Determines max risk and credit potential.">Width</span>
                 </th>
                 <th class="text-end">
@@ -129,20 +121,7 @@
                 <td rowspan="2" class="align-middle text-center fw-bold fs-5">{{ c.ticker }}</td>
                 <td>{{ pretty_strategy(c.strategy) }}</td>
                 <td class="text-nowrap">{{ mmddyy(legs.get('expiration', '')) }}</td>
-                {% if legs.get('type') == 'iron_condor' %}
-                <td class="text-end text-nowrap">
-                    {{ legs.get('short_put_strike','?')|int }}P /
-                    {{ legs.get('short_call_strike','?')|int }}C
-                </td>
-                <td class="text-end text-nowrap">
-                    {{ legs.get('long_put_strike','?')|int }}P /
-                    {{ legs.get('long_call_strike','?')|int }}C
-                </td>
-                {% else %}
-                <td class="text-end">{{ legs.get('short_strike', '—') }}</td>
-                <td class="text-end">{{ legs.get('long_strike',  '—') }}</td>
-                {% endif %}
-                <td class="text-end">{{ legs.get('width', '—') }}</td>
+                <td class="text-end">${{ "%.2f"|format(legs.get('width', 0)|float) }}</td>
                 <td class="text-end">${{ "%.2f"|format(c.credit) }}</td>
                 <td class="text-end">{{ "%.1f%%"|format((c.credit / width * 100) if width else 0) }}</td>
                 <td class="text-end">{{ "%.1f%%"|format(c['pop'] * 100) }}</td>
@@ -198,7 +177,7 @@
             {# ── Row 2: trade instructions ── #}
             <tr class="candidate-row" style="{{ row_style }}; border-bottom: 2px solid rgba(128,128,128,0.25);"
                 onclick="showRationale(event, {{ c.id }}, '{{ c.ticker }}', '{{ pretty_strategy(c.strategy) }}')">
-                <td colspan="14" class="pt-0 pb-2">
+                <td colspan="12" class="pt-0 pb-2">
                     <small class="font-monospace opacity-75">
                         {% for line in trade_instructions(legs) %}
                             {{ line }}{% if not loop.last %}<br>{% endif %}
