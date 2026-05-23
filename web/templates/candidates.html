@@ -19,11 +19,6 @@
   .rationale-content li  { margin-bottom: .25rem; }
   .rationale-content strong { color: #ffc107; }
 
-  /* Grade buttons */
-  .grade-btn { min-width: 28px; padding: 1px 6px; font-weight: 700; font-size: 0.78rem; }
-  .grade-btn.active-A { background-color: #198754 !important; color: #fff !important; border-color: #198754 !important; }
-  .grade-btn.active-B { background-color: #fd7e14 !important; color: #fff !important; border-color: #fd7e14 !important; }
-  .grade-btn.active-C { background-color: #6c757d !important; color: #fff !important; border-color: #6c757d !important; }
   .alloc-badge { font-size: 0.7rem; opacity: 0.85; }
 </style>
 {% endblock %}
@@ -136,19 +131,16 @@
                 <td class="text-end">{{ "%.1f%%"|format((c.iv or 0) * 100) }}</td>
                 <td class="text-nowrap"><small>{{ mmddyy(c.generated_at) }}</small></td>
 
-                {# Grade selector #}
-                <td rowspan="2" class="align-middle" onclick="event.stopPropagation()">
-                    <div class="d-flex gap-1 justify-content-center mb-1">
-                        <button class="btn btn-sm btn-outline-success grade-btn {% if c.grade == 'A' %}active-A{% endif %}"
-                                onclick="setGrade({{ c.id }}, 'A', this)">A</button>
-                        <button class="btn btn-sm btn-outline-warning grade-btn {% if c.grade == 'B' %}active-B{% endif %}"
-                                onclick="setGrade({{ c.id }}, 'B', this)">B</button>
-                        <button class="btn btn-sm btn-outline-secondary grade-btn {% if c.grade == 'C' %}active-C{% endif %}"
-                                onclick="setGrade({{ c.id }}, 'C', this)">C</button>
-                    </div>
-                    <div id="alloc-{{ c.id }}" class="text-center alloc-badge text-muted">
-                        {{ alloc_pct }} alloc
-                    </div>
+                {# Grade badge (auto-assigned) #}
+                <td rowspan="2" class="align-middle text-center">
+                    {% if c.grade == 'A' %}
+                        <span class="badge bg-success fs-6">A</span>
+                    {% elif c.grade == 'B' %}
+                        <span class="badge bg-warning text-dark fs-6">B</span>
+                    {% else %}
+                        <span class="badge bg-secondary fs-6">C</span>
+                    {% endif %}
+                    <div class="alloc-badge text-muted mt-1">{{ alloc_pct }} alloc</div>
                 </td>
 
                 {# Actions #}
@@ -229,31 +221,6 @@ function toggleReject(id) {
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
-const ALLOC = { A: '120%', B: '110%', C: '100%' };
-
-function setGrade(cid, grade, clickedBtn) {
-    // Toggle off if already active
-    const isActive = clickedBtn.classList.contains('active-' + grade);
-    const newGrade = isActive ? null : grade;
-
-    fetch('/candidates/' + cid + '/grade', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grade: newGrade }),
-    }).then(r => r.json()).then(data => {
-        if (data.ok !== true) return;
-        // Update button styles
-        const row = clickedBtn.closest('td');
-        row.querySelectorAll('.grade-btn').forEach(btn => {
-            btn.classList.remove('active-A', 'active-B', 'active-C');
-        });
-        if (newGrade) clickedBtn.classList.add('active-' + newGrade);
-
-        // Update allocation badge
-        const allocEl = document.getElementById('alloc-' + cid);
-        allocEl.textContent = (newGrade ? ALLOC[newGrade] : '100%') + ' alloc';
-    });
-}
 
 function showRationale(event, cid, ticker, strategy) {
     if (event.target.closest('button, input, form, a')) return;

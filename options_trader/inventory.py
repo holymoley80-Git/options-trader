@@ -22,6 +22,59 @@ SCREEN_MIN_POP = float(os.getenv("SCREEN_MIN_POP", "0.65"))
 
 
 # ---------------------------------------------------------------------------
+# Signal confidence grading
+# ---------------------------------------------------------------------------
+
+def compute_grade(credit: float, max_risk: float, pop: float, greeks: dict, iv: float | None) -> str:
+    """
+    Score the strength of a candidate's signal and return A, B, or C.
+
+    Scoring (max 8):
+      Cr/W ≥ 38% → +2  |  ≥ 33% → +1      (capital efficiency)
+      PoP  ≥ 72% → +2  |  ≥ 67% → +1      (probability of success)
+      |Net Δ| ≤ 0.03 → +2  |  ≤ 0.06 → +1 (market neutrality)
+      IV   ≥ 30%  → +1                      (premium-rich environment)
+      Net Θ ≥ 0.03 → +1                     (theta efficiency)
+
+    A = 6–8  (120% allocation)
+    B = 3–5  (110% allocation)
+    C = 0–2  (100% allocation)
+    """
+    cr_w = credit / max_risk if max_risk else 0
+    net_delta_abs = abs(greeks.get('net_delta', 0))
+    net_theta = greeks.get('net_theta', 0)
+
+    score = 0
+
+    if cr_w >= 0.38:
+        score += 2
+    elif cr_w >= 0.33:
+        score += 1
+
+    if pop >= 0.72:
+        score += 2
+    elif pop >= 0.67:
+        score += 1
+
+    if net_delta_abs <= 0.03:
+        score += 2
+    elif net_delta_abs <= 0.06:
+        score += 1
+
+    if iv and iv >= 0.30:
+        score += 1
+
+    if net_theta >= 0.03:
+        score += 1
+
+    if score >= 6:
+        return 'A'
+    if score >= 3:
+        return 'B'
+    return 'C'
+
+
+# ---------------------------------------------------------------------------
 # Candidate slot filling
 # ---------------------------------------------------------------------------
 
@@ -58,6 +111,7 @@ def fill_candidate_slots() -> int:
 
             strategy, spread, spot = result
             legs, greeks, credit, max_risk, pop, iv = _extract_candidate_fields(strategy, spread)
+            grade = compute_grade(credit, max_risk, pop, greeks, iv)
 
             cid = insert_candidate(
                 ticker=ticker,
@@ -68,6 +122,7 @@ def fill_candidate_slots() -> int:
                 pop=pop,
                 greeks_json_str=json.dumps(greeks),
                 iv=iv,
+                grade=grade,
             )
             # Auto-create a paper position to track this proposal's outcome
             insert_position(

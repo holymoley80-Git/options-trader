@@ -163,8 +163,8 @@ def dashboard():
 
 @app.route("/candidates")
 def candidates():
+    from options_trader.inventory import compute_grade
     pending = get_candidates(status="pending")
-    # Parse JSON fields for display
     for c in pending:
         try:
             c["legs"] = json.loads(c.get("legs_json") or "{}")
@@ -174,6 +174,11 @@ def candidates():
             c["greeks"] = json.loads(c.get("greeks_json") or "{}")
         except Exception:
             c["greeks"] = {}
+        # Auto-grade any candidate that slipped through without one
+        if not c.get("grade"):
+            g = compute_grade(c["credit"], c["max_risk"], c["pop"], c["greeks"], c.get("iv"))
+            update_candidate_grade(c["id"], g)
+            c["grade"] = g
     return render_template("candidates.html", candidates=pending)
 
 
@@ -441,4 +446,4 @@ def view_report(date_str):
 
 if __name__ == "__main__":
     init_db()
-    app.run(host="0.0.0.0", port=5001, debug=False)
+    app.run(host="0.0.0.0", port=5001, debug=True, use_reloader=True)

@@ -122,15 +122,16 @@ def insert_candidate(
     pop: float,
     greeks_json_str: str,
     iv: float | None,
+    grade: str | None = None,
 ) -> int:
     """Insert a new candidate and return its id."""
     generated_at = datetime.utcnow().isoformat()
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO candidates
-               (ticker, strategy, legs_json, credit, max_risk, pop, greeks_json, iv, generated_at, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
-            (ticker, strategy, legs_json_str, credit, max_risk, pop, greeks_json_str, iv, generated_at),
+               (ticker, strategy, legs_json, credit, max_risk, pop, greeks_json, iv, generated_at, status, grade)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+            (ticker, strategy, legs_json_str, credit, max_risk, pop, greeks_json_str, iv, generated_at, grade),
         )
         return cur.lastrowid
 
