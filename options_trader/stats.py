@@ -283,6 +283,35 @@ def iv_entry_vs_outcome() -> list[dict]:
     return result
 
 
+def grade_breakdown() -> list[dict]:
+    """Win rate, P&L, and trade count broken down by confidence grade (A/B/C/ungraded)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT COALESCE(grade, '—') as grade,
+                      COUNT(*) as trade_count,
+                      SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
+                      SUM(pnl) as total_pnl,
+                      AVG(pnl) as avg_pnl
+               FROM positions
+               WHERE status='closed' AND pnl IS NOT NULL
+               GROUP BY COALESCE(grade, '—')
+               ORDER BY CASE COALESCE(grade,'—') WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END"""
+        ).fetchall()
+
+    result = []
+    for r in rows:
+        tc = r[1] or 0
+        wins = r[2] or 0
+        result.append({
+            "grade": r[0],
+            "trade_count": tc,
+            "win_rate": round(wins / tc, 4) if tc > 0 else 0.0,
+            "total_pnl": round(r[3] or 0, 4),
+            "avg_pnl": round(r[4] or 0, 4),
+        })
+    return result
+
+
 def strategy_breakdown() -> list[dict]:
     """Count of open/pending/closed per strategy, with sum net_delta for open."""
     with get_conn() as conn:

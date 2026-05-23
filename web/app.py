@@ -138,6 +138,7 @@ def index():
 def dashboard():
     s = _stats.summary()
     breakdown = _stats.strategy_breakdown()
+    grade_breakdown = _stats.grade_breakdown()
     today_str = date.today().isoformat()
 
     # Open positions with today's exit signals (real positions only)
@@ -153,6 +154,7 @@ def dashboard():
         "dashboard.html",
         summary=s,
         breakdown=breakdown,
+        grade_breakdown=grade_breakdown,
         signal_positions=signal_positions,
     )
 
