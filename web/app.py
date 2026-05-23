@@ -91,7 +91,7 @@ def _check_password(plain: str) -> bool:
 
 @app.before_request
 def require_login():
-    if request.endpoint in ("login", "logout", "static"):
+    if request.endpoint in ("login", "logout", "static", "apple_touch_icon"):
         return
     if not session.get("logged_in"):
         return redirect(url_for("login"))
@@ -100,6 +100,12 @@ def require_login():
 # ---------------------------------------------------------------------------
 # Auth routes
 # ---------------------------------------------------------------------------
+
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def apple_touch_icon():
+    return send_file(str(_PROJECT_ROOT / "web" / "static" / "optionsicon.png"), mimetype="image/png")
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
