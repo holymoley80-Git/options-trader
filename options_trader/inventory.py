@@ -75,6 +75,49 @@ def compute_grade(credit: float, max_risk: float, pop: float, greeks: dict, iv: 
 
 
 # ---------------------------------------------------------------------------
+# Paper position backfill
+# ---------------------------------------------------------------------------
+
+def backfill_paper_positions() -> int:
+    """Create paper positions for pending candidates that don't already have one.
+
+    Safe to call repeatedly — skips candidates that already have a paper entry.
+    Returns the number of new paper positions created.
+    """
+    from options_trader.db import get_candidates, insert_position, get_conn
+
+    pending = get_candidates(status="pending")
+    if not pending:
+        return 0
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT candidate_id FROM positions WHERE paper=1 AND candidate_id IS NOT NULL"
+        ).fetchall()
+    existing_cids = {r[0] for r in rows}
+
+    created = 0
+    for c in pending:
+        if c["id"] in existing_cids:
+            continue
+        insert_position(
+            candidate_id=c["id"],
+            ticker=c["ticker"],
+            strategy=c["strategy"],
+            legs_json_str=c["legs_json"],
+            entry_credit=c["credit"],
+            entry_greeks_json_str=c["greeks_json"],
+            entry_price_underlying=None,
+            paper=1,
+            entry_iv=c.get("iv"),
+            grade=c.get("grade"),
+        )
+        created += 1
+
+    return created
+
+
+# ---------------------------------------------------------------------------
 # Candidate slot filling
 # ---------------------------------------------------------------------------
 

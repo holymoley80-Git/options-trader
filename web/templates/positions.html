@@ -39,9 +39,15 @@
         <thead class="table-secondary">
             <tr>
                 <th>Ticker</th><th>Strategy</th><th>Exp</th>
-                <th>Entry Date</th><th class="text-end">Entry Credit</th>
+                {% if tab == 'paper' %}
+                <th>Grade</th><th>Alloc</th>
+                {% else %}
+                <th>Entry Date</th>
+                {% endif %}
+                <th class="text-end">Entry Credit</th>
                 <th class="text-end">Cost-to-Close</th>
-                <th class="text-end">Unrl P&amp;L (1 lot)</th>
+                <th class="text-end">P&amp;L (1 lot)</th>
+                {% if tab == 'paper' %}<th class="text-end">P&amp;L (alloc)</th>{% endif %}
                 <th class="text-end">Δ (entry→now)</th>
                 <th class="text-end">Θ (entry→now)</th>
                 <th>Signals</th>
@@ -62,18 +68,17 @@
             {% set curr_theta  = current_greeks.get('net_theta', entry_theta) %}
             {% set signal_reason = snap.exit_signal_reason if snap else '' %}
 
+            {# Allocation multiplier from grade #}
+            {% if pos.grade == 'A' %}{% set alloc = 1.2 %}{% set alloc_pct = '120%' %}
+            {% elif pos.grade == 'B' %}{% set alloc = 1.1 %}{% set alloc_pct = '110%' %}
+            {% else %}{% set alloc = 1.0 %}{% set alloc_pct = '100%' %}{% endif %}
+
             {# Row color based on P&L #}
             {% if unrl_pnl is not none %}
-              {% if unrl_pnl > 0 %}
-                {% set row_class = 'pos-row-green' %}
-              {% elif unrl_pnl < 0 %}
-                {% set row_class = 'pos-row-red' %}
-              {% else %}
-                {% set row_class = 'pos-row-neutral' %}
-              {% endif %}
-            {% else %}
-              {% set row_class = 'pos-row-neutral' %}
-            {% endif %}
+              {% if unrl_pnl > 0 %}{% set row_class = 'pos-row-green' %}
+              {% elif unrl_pnl < 0 %}{% set row_class = 'pos-row-red' %}
+              {% else %}{% set row_class = 'pos-row-neutral' %}{% endif %}
+            {% else %}{% set row_class = 'pos-row-neutral' %}{% endif %}
 
             <tr class="{{ row_class }}">
                 <td class="ticker-link fw-bold"
@@ -81,22 +86,31 @@
                     title="Click to view entry vs current snapshot">{{ pos.ticker }}</td>
                 <td><small>{{ pretty_strategy(pos.strategy) }}</small></td>
                 <td>{{ mmddyy(legs.get('expiration', '')) }}</td>
+                {% if tab == 'paper' %}
+                <td class="text-center">
+                    {% if pos.grade == 'A' %}<span class="badge bg-success">A</span>
+                    {% elif pos.grade == 'B' %}<span class="badge bg-warning text-dark">B</span>
+                    {% else %}<span class="badge bg-secondary">C</span>{% endif %}
+                </td>
+                <td class="text-muted small">{{ alloc_pct }}</td>
+                {% else %}
                 <td>{{ mmddyy(pos.entry_date) }}</td>
+                {% endif %}
                 <td class="text-end">${{ "%.2f"|format(pos.entry_credit) }}</td>
                 <td class="text-end">
-                    {% if cost_to_close is not none %}
-                        ${{ "%.2f"|format(cost_to_close) }}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
+                    {% if cost_to_close is not none %}${{ "%.2f"|format(cost_to_close) }}
+                    {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td class="text-end fw-bold">
-                    {% if unrl_pnl is not none %}
-                        ${{ "%+.2f"|format(unrl_pnl * 100) }}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
+                    {% if unrl_pnl is not none %}${{ "%+.2f"|format(unrl_pnl * 100) }}
+                    {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
+                {% if tab == 'paper' %}
+                <td class="text-end fw-bold">
+                    {% if unrl_pnl is not none %}${{ "%+.2f"|format(unrl_pnl * 100 * alloc) }}
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                {% endif %}
                 <td class="text-end">
                     <small>{{ "%+.3f"|format(entry_delta) }} → {{ "%+.3f"|format(curr_delta) }}</small>
                 </td>

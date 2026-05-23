@@ -327,6 +327,8 @@ def positions():
     tab = request.args.get("tab", "open")
 
     if tab == "paper":
+        from options_trader.inventory import backfill_paper_positions
+        backfill_paper_positions()
         pos_list = get_positions(paper=1)
     else:
         status = "open" if tab == "open" else "closed"
